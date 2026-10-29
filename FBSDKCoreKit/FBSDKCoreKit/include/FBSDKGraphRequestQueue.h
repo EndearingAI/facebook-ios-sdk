@@ -79,6 +79,7 @@ NS_SWIFT_NAME(GraphRequestQueue)
  executed in a single batch request. The queue is then emptied.
  */
 - (void)flush;
+- (void)clearForTrackingWithdrawal;
 
 @end
 

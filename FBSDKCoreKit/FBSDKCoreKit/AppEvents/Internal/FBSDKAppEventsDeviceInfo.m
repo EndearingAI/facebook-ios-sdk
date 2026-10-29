@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
 #import <sys/sysctl.h>
@@ -62,7 +62,7 @@ static FBSDKAppEventsDeviceInfo *sharedInstance;
   self.settings = settings;
   self.isEncodingDirty = YES;
 
-  [self _collectPersistentData];
+  // Device metadata collection is disabled in the attribution-only distribution.
 }
 
 - (NSString *)storageKey
@@ -74,39 +74,7 @@ static FBSDKAppEventsDeviceInfo *sharedInstance;
 
 - (nullable NSString *)encodedDeviceInfo
 {
-  BOOL needsGroup1Collection = NO;
-  @synchronized(self) {
-    BOOL isGroup1Expired = [self _isGroup1Expired];
-    BOOL isEncodingExpired = isGroup1Expired; // Can || other groups in if we add them
-
-    // As long as group1 hasn't expired, we can just return the last generated value
-    if (_encodedDeviceInfo && !isEncodingExpired) {
-      return _encodedDeviceInfo;
-    }
-
-    if (isGroup1Expired && !_isCollectingGroup1) {
-      _isCollectingGroup1 = YES;
-      needsGroup1Collection = YES;
-    }
-  }
-
-  // Collect expensive data outside the lock to avoid blocking while
-  // CTTelephonyNetworkInfo accesses the main thread internally.
-  if (needsGroup1Collection) {
-    [self _collectGroup1Data];
-    @synchronized(self) {
-      _isCollectingGroup1 = NO;
-    }
-  }
-
-  @synchronized(self) {
-    if (_isEncodingDirty) {
-      _encodedDeviceInfo = [self _generateEncoding];
-      _isEncodingDirty = NO;
-    }
-
-    return _encodedDeviceInfo;
-  }
+  return nil;
 }
 
 // This data need only be collected once.

@@ -27,9 +27,11 @@ NS_ASSUME_NONNULL_BEGIN
 NS_SWIFT_NAME(GraphRequestMetadata)
 @interface FBSDKGraphRequestMetadata : NSObject
 
-@property (nonatomic, retain) id<FBSDKGraphRequest> request;
-@property (nonatomic, copy) FBSDKGraphRequestCompletion completionHandler;
-@property (nonatomic, copy) NSDictionary<NSString *, id> *batchParameters;
+@property(nullable, nonatomic, retain) id<FBSDKGraphRequest> request;
+@property(nonatomic, readonly) uint64_t trackingGeneration;
++ (void)cancelAllForTrackingWithdrawal;
+@property(nullable, nonatomic, copy) FBSDKGraphRequestCompletion completionHandler;
+@property(nullable, nonatomic, copy) NSDictionary<NSString *, id> *batchParameters;
 
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
@@ -39,7 +41,7 @@ NS_SWIFT_NAME(GraphRequestMetadata)
                 batchParameters:(nullable NSDictionary<NSString *, id> *)batchParameters
   NS_DESIGNATED_INITIALIZER;
 
-- (void)invokeCompletionHandlerForConnection:(id<FBSDKGraphRequestConnecting>)connection
+- (void)invokeCompletionHandlerForConnection:(nullable id<FBSDKGraphRequestConnecting>)connection
                                  withResults:(nullable id)results
                                        error:(nullable NSError *)error;
 @end

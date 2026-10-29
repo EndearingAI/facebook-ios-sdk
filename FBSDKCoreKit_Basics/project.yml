@@ -41,6 +41,7 @@ targets:
       - SwiftlintBuildPhaseTemplate
     type: framework
     dependencies:
+      - sdk: AppTrackingTransparency.framework
       - sdk: UIKit.framework
       - sdk: libz.tbd
     platform: iOS

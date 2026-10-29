@@ -6,11 +6,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 
 #import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKGraphRequestQueue.h"
 #import "FBSDKLogger+Internal.h"
+#import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
 /// The Graph API rejects a batch of more than 50 sub-requests outright, with no partial results.
 static const NSUInteger kMaxRequestsPerBatch = 50;
@@ -82,63 +83,116 @@ static const NSUInteger kMaxQueuedRequests = 1000;
   }
 }
 
+- (void)clearForTrackingWithdrawal
+{
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    for (FBSDKGraphRequestMetadata *metadata in self.requestsQueue.copy)
+    {
+      [metadata invokeCompletionHandlerForConnection:nil withResults:nil error:FBSDKTrackingConsent.cancellationError];
+    }
+    [self.requestsQueue removeAllObjects];
+  }
+}
+
 - (void)enqueueRequestMetadata:(FBSDKGraphRequestMetadata *)requestMetadata
 {
-  NSUInteger droppedTotal = 0;
-  @synchronized (self) {
-    if (self.requestsQueue.count < kMaxQueuedRequests) {
-      [self logEnqueueRequest:requestMetadata.request];
-      [FBSDKTypeUtility array:self.requestsQueue addObject:requestMetadata];
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if (![FBSDKTrackingConsent isCurrentGeneration:requestMetadata.trackingGeneration])
+    {
+      [requestMetadata invokeCompletionHandlerForConnection:nil
+                                                withResults:nil
+                                                      error:FBSDKTrackingConsent.cancellationError];
       return;
     }
-    self.numDroppedRequests += 1;
-    droppedTotal = self.numDroppedRequests;
-  }
+    NSUInteger droppedTotal = 0;
+    @synchronized(self)
+    {
+      if (self.requestsQueue.count < kMaxQueuedRequests)
+      {
+        [self logEnqueueRequest:requestMetadata.request];
+        [FBSDKTypeUtility array:self.requestsQueue addObject:requestMetadata];
+        return;
+      }
+      self.numDroppedRequests += 1;
+      droppedTotal = self.numDroppedRequests;
+    }
 
-  // A dropped request is never sent, so its completion must be invoked here -- the flush path,
-  // which normally invokes it via `addRequest:completion:`, will never see this request. Delivery
-  // is dispatched to the main queue to match how a completed request's handler is invoked, and so
-  // that the handler runs after the caller has finished submitting rather than part way through it.
-  // The connection argument is nil because no connection was ever created for this request.
-  NSString *msg = [NSString stringWithFormat:
-                   @"FBSDKGraphRequestQueue full (%lu); dropping request. Total dropped: %lu",
-                   (unsigned long)kMaxQueuedRequests, (unsigned long)droppedTotal];
-  [self.logger.class singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors logEntry:msg];
-  FBSDKGraphRequestCompletion completionHandler = requestMetadata.completionHandler;
-  if (completionHandler) {
-    NSError *error = [self.errorFactory unknownErrorWithMessage:msg userInfo:nil];
-    dispatch_async(dispatch_get_main_queue(), ^{
-      completionHandler(nil, nil, error);
-    });
+    // A dropped request is never sent, so its completion must be invoked here -- the flush path,
+    // which normally invokes it via `addRequest:completion:`, will never see this request. Delivery
+    // is dispatched to the main queue to match how a completed request's handler is invoked, and so
+    // that the handler runs after the caller has finished submitting rather than part way through it.
+    // The connection argument is nil because no connection was ever created for this request.
+    NSString *msg =
+        [NSString stringWithFormat:@"FBSDKGraphRequestQueue full (%lu); dropping request. Total dropped: %lu",
+                                   (unsigned long)kMaxQueuedRequests, (unsigned long)droppedTotal];
+    [self.logger.class singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors logEntry:msg];
+    FBSDKGraphRequestCompletion completionHandler = requestMetadata.completionHandler;
+    if (completionHandler)
+    {
+      NSError *error = [self.errorFactory unknownErrorWithMessage:msg userInfo:nil];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [requestMetadata invokeCompletionHandlerForConnection:nil withResults:nil error:error];
+      });
+    }
   }
 }
 
 - (void)flush
 {
-  @synchronized (self) {
-    if (self.requestsQueue.count == 0) {
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if (!FBSDKTrackingConsent.isEnabled)
+    {
+      [self clearForTrackingWithdrawal];
       return;
     }
-    // Do not flush until the SDK is configured to make requests. Issuing a batch (or single) graph
-    // request without an app ID / client token raises an exception, so keep the requests queued and
-    // flush them once a valid configuration is set (e.g. FacebookAppID at launch, or a later
-    // Settings.appID / Settings.clientToken assignment, which re-invokes flush).
-    if (![self canFlushRequests]) {
-      return;
-    }
-    NSArray<FBSDKGraphRequestMetadata *> *requestsToFlush = [self.requestsQueue copy];
-    [self.requestsQueue removeAllObjects];
-    [self logFlushingRequests:requestsToFlush];
-
-    NSUInteger total = requestsToFlush.count;
-    for (NSUInteger offset = 0; offset < total; offset += kMaxRequestsPerBatch) {
-      NSUInteger length = MIN(kMaxRequestsPerBatch, total - offset);
-      NSArray<FBSDKGraphRequestMetadata *> *chunk = [requestsToFlush subarrayWithRange:NSMakeRange(offset, length)];
-      id<FBSDKGraphRequestConnecting> requestConnection = [self.graphRequestConnectionFactory createGraphRequestConnection];
-      for (FBSDKGraphRequestMetadata *metadata in chunk) {
-        [requestConnection addRequest:metadata.request completion:metadata.completionHandler];
+    @synchronized(self)
+    {
+      if (self.requestsQueue.count == 0)
+      {
+        return;
       }
-      [requestConnection start];
+      // Do not flush until the SDK is configured to make requests. Issuing a batch (or single) graph
+      // request without an app ID / client token raises an exception, so keep the requests queued and
+      // flush them once a valid configuration is set (e.g. FacebookAppID at launch, or a later
+      // Settings.appID / Settings.clientToken assignment, which re-invokes flush).
+      if (![self canFlushRequests])
+      {
+        return;
+      }
+      NSArray<FBSDKGraphRequestMetadata *> *requestsToFlush = [self.requestsQueue copy];
+      [self.requestsQueue removeAllObjects];
+      [self logFlushingRequests:requestsToFlush];
+
+      NSUInteger total = requestsToFlush.count;
+      for (NSUInteger offset = 0; offset < total; offset += kMaxRequestsPerBatch)
+      {
+        NSUInteger length = MIN(kMaxRequestsPerBatch, total - offset);
+        NSArray<FBSDKGraphRequestMetadata *> *chunk = [requestsToFlush subarrayWithRange:NSMakeRange(offset, length)];
+        id<FBSDKGraphRequestConnecting> requestConnection =
+            [self.graphRequestConnectionFactory createGraphRequestConnection];
+        for (FBSDKGraphRequestMetadata *metadata in chunk)
+        {
+          if ([FBSDKTrackingConsent isCurrentGeneration:metadata.trackingGeneration])
+          {
+            [requestConnection addRequest:metadata.request
+                               completion:^(id<FBSDKGraphRequestConnecting> connection, id result, NSError *error) {
+                                 [metadata invokeCompletionHandlerForConnection:connection
+                                                                    withResults:result
+                                                                          error:error];
+                               }];
+          }
+          else
+          {
+            [metadata invokeCompletionHandlerForConnection:nil
+                                               withResults:nil
+                                                     error:FBSDKTrackingConsent.cancellationError];
+          }
+        }
+        [requestConnection start];
+      }
     }
   }
 }

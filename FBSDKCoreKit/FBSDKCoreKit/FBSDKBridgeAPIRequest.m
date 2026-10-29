@@ -12,7 +12,7 @@
 #import "FBSDKBridgeAPIRequest+Private.h"
 
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 #import <UIKit/UIApplication.h>
 

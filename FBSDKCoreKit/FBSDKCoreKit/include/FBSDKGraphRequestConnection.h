@@ -47,6 +47,7 @@ NS_SWIFT_NAME(NonJSONResponseProperty);
  */
 NS_SWIFT_NAME(GraphRequestConnection)
 @interface FBSDKGraphRequestConnection : NSObject <FBSDKGraphRequestConnecting>
++ (void)cancelAllForTrackingWithdrawal;
 
 /// The default timeout on all FBSDKGraphRequestConnection instances. Defaults to 60 seconds.
 @property (class, nonatomic, assign) NSTimeInterval defaultConnectionTimeout;

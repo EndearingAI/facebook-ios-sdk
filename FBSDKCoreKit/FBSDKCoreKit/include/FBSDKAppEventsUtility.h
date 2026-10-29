@@ -39,6 +39,8 @@ NS_SWIFT_NAME(_AppEventsUtility)
 @property (nullable, nonatomic) id<FBSDKErrorCreating> errorFactory;
 @property (nullable, nonatomic) id<FBSDKDataPersisting> dataStore;
 
+- (void)clearTrackingIdentifiers;
+
 - (BOOL)isSensitiveUserData:(NSString *)text;
 - (BOOL)isStandardEvent:(nullable NSString *)event;
 

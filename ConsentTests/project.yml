@@ -1,0 +1,44 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved. Licensed under the root LICENSE file.
+name: MetaConsentTests
+projectReferences:
+  Core:
+    path: ../FBSDKCoreKit/FBSDKCoreKit.xcodeproj
+  Basics:
+    path: ../FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.xcodeproj
+  AEM:
+    path: ../FBAEMKit/FBAEMKit.xcodeproj
+options:
+  deploymentTarget:
+    iOS: '13.0'
+  createIntermediateGroups: true
+targets:
+  MetaConsentTestHost:
+    type: application
+    platform: iOS
+    sources: [main.m]
+    configFiles:
+      Debug: Host.xcconfig
+      Release: Host.xcconfig
+  MetaConsentTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [MetaConsentTests.m, ConsentTestBootstrap.swift]
+    configFiles:
+      Debug: Tests.xcconfig
+      Release: Tests.xcconfig
+    dependencies:
+      - target: MetaConsentTestHost
+      - target: Core/FBSDKCoreKit-Dynamic
+      - target: Basics/FBSDKCoreKit_Basics-Dynamic
+      - target: AEM/FBAEMKit-Dynamic
+      - sdk: AppTrackingTransparency.framework
+      - sdk: libz.tbd
+schemes:
+  MetaConsentTests:
+    build:
+      targets:
+        MetaConsentTestHost: all
+        MetaConsentTests: [test]
+    test:
+      targets: [MetaConsentTests]

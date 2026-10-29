@@ -112,7 +112,7 @@ NS_SWIFT_NAME(BasicUtility)
  */
 + (nullable NSData *)gzip:(NSData *)data;
 
-+ (NSString *)anonymousID;
++ (nullable NSString *)anonymousID;
 + (NSString *)persistenceFilePath:(NSString *)filename;
 + (nullable NSString *)SHA256Hash:(nullable NSObject *)input;
 

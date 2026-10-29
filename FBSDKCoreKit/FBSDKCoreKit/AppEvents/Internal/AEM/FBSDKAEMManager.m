@@ -9,7 +9,7 @@
 #import "FBSDKAEMManager.h"
 
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 
 #import <UIKit/UIKit.h>
 

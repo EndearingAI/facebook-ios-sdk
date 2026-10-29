@@ -383,8 +383,8 @@ final class GraphRequestConnectionTests: XCTestCase, GraphRequestConnectionDeleg
     connection.add(makeRequestForMeWithEmptyFields()) { _, _, _ in }
     let metadata = try XCTUnwrap(connection.requests.firstObject as? GraphRequestMetadata)
 
-    XCTAssertTrue(
-      metadata.batchParameters.isEmpty,
+    XCTAssertNil(
+      metadata.batchParameters,
       "Adding a request without a batch entry name should not store batch parameters"
     )
   }
@@ -396,8 +396,8 @@ final class GraphRequestConnectionTests: XCTestCase, GraphRequestConnectionDeleg
     ) { _, _, _ in }
     let metadata = try XCTUnwrap(connection.requests.firstObject as? GraphRequestMetadata)
 
-    XCTAssertTrue(
-      metadata.batchParameters.isEmpty,
+    XCTAssertNil(
+      metadata.batchParameters,
       "Should not store batch parameters for a request with an empty batch entry name"
     )
   }

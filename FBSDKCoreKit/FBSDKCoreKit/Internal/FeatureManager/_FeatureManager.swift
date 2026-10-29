@@ -23,48 +23,12 @@ public final class _FeatureManager: NSObject, FeatureChecking, _FeatureDisabling
   public static let shared = _FeatureManager()
 
   public func isEnabled(_ feature: SDKFeature) -> Bool {
-    if SDKFeature.core == feature || SDKFeature.none == feature {
-      return true
-    }
-
-    guard let dependencies = try? Self.getDependencies() else {
-      return false
-    }
-
-    // check if the feature is locally disabled by Crash Shield first
-    let version = dependencies.store.fb_string(forKey: storageKey(for: feature))
-    if version == dependencies.settings.sdkVersion {
-      return false
-    }
-
-    guard let parentFeature = getParentFeature(for: feature) else {
-      return false
-    }
-
-    if parentFeature == feature {
-      return checkGateKeeper(for: feature)
-    } else {
-      return isEnabled(parentFeature) && checkGateKeeper(for: feature)
-    }
+    // The maintained distribution supports explicit attribution only.
+    return feature == .core || feature == .none || feature == .appEvents
   }
 
   public func check(_ feature: SDKFeature, completionBlock: @escaping FBSDKFeatureManagerBlock) {
-    guard let dependencies = try? Self.getDependencies() else {
-      completionBlock(false)
-      return
-    }
-
-    // check if the feature is locally disabled by Crash Shield first
-    let version = dependencies.store.fb_string(forKey: storageKey(for: feature))
-    if version == dependencies.settings.sdkVersion {
-      completionBlock(false)
-      return
-    }
-
-    // check gk
-    dependencies.gateKeeperManager.loadGateKeepers { _ in
-      completionBlock(self.isEnabled(feature))
-    }
+    completionBlock(isEnabled(feature))
   }
 
   public func disableFeature(_ feature: SDKFeature) {

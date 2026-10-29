@@ -13,23 +13,8 @@ extension Settings {
   }
 
   func checkAutoLogAppEventsEnabled() -> Bool {
-    guard let dependencies = try? getDependencies() else {
-      return true
-    }
-    guard let migratedAutoLogValues = dependencies
-      .serverConfigurationProvider.cachedServerConfiguration().migratedAutoLogValues else {
-      return isAutoLogAppEventsEnabledLocally
-    }
-    if let migratedAutoLogEnabled = migratedAutoLogValues[AutoLogAppEventServerFlags.ENABLE.rawValue] as? NSNumber {
-      return migratedAutoLogEnabled.boolValue
-    }
-    if let locallyEnabled = checkClientSideConfiguration(dependencies) {
-      return locallyEnabled
-    }
-    if let migratedDefault = migratedAutoLogValues[AutoLogAppEventServerFlags.DEFAUT.rawValue] as? NSNumber {
-      return migratedDefault.boolValue
-    }
-    return true
+    // Server migration flags cannot re-enable automatic collection in this distribution.
+    return false
   }
 
   // swiftlint:disable:next discouraged_optional_boolean

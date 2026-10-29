@@ -7,7 +7,7 @@
  */
 
 final class AppEventsStateFactory: _AppEventsStateProviding {
-  func createState(tokenString: String, appID: String) -> _AppEventsState {
+  func createState(tokenString: String?, appID: String) -> _AppEventsState {
     _AppEventsState(token: tokenString, appID: appID)
   }
 }

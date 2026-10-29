@@ -7,7 +7,7 @@
  */
 
 #import <FBSDKCoreKit/FBSDKAccessTokenProviding.h>
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 #import <FBSDKCoreKit/FBSDKGraphRequestFactory.h>
 #import <FBSDKCoreKit/FBSDKImpressionLoggerFactory.h>
 #import <FBSDKCoreKit_Basics/FBSDKNotificationDelivering.h>

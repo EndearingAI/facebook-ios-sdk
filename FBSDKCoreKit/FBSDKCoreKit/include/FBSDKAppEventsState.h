@@ -26,6 +26,8 @@ NS_SWIFT_NAME(_AppEventsState)
 
 @property (nonatomic, readonly, copy) NSArray<NSDictionary<NSString *, id> *> *events;
 @property (nonatomic, readonly, assign) NSUInteger numSkipped;
+@property(nonatomic, readonly) uint64_t trackingGeneration;
++ (void)eraseAllTrackingStates;
 @property (nonatomic, readonly, copy) NSString *tokenString;
 @property (nonatomic, readonly, copy) NSString *appID;
 @property (nonatomic, readonly, getter = areAllEventsImplicit) BOOL allEventsImplicit;

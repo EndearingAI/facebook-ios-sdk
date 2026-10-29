@@ -1,0 +1,12 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+// All rights reserved.
+// This source code is licensed under the license found in the root LICENSE file.
+IPHONEOS_DEPLOYMENT_TARGET = 13.0
+CODE_SIGNING_ALLOWED = NO
+CODE_SIGNING_REQUIRED = NO
+GENERATE_INFOPLIST_FILE = YES
+CLANG_ENABLE_MODULES = YES
+CLANG_ENABLE_OBJC_ARC = YES
+SWIFT_VERSION = 5.0
+ENABLE_TESTABILITY = YES
+GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS = NO

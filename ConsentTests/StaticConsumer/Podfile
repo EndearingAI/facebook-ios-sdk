@@ -1,0 +1,14 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved. Licensed under the root LICENSE file.
+
+platform :ios, '13.0'
+workspace 'MetaStaticConsumer'
+project 'MetaStaticConsumer.xcodeproj'
+
+# Match Expo's default static-library integration; do not add use_frameworks!.
+sdk_root = ENV.fetch('FBSDK_CONSENT_SDK_ROOT') { File.expand_path('../..', __dir__) }
+target 'MetaStaticConsumer' do
+  %w[FBSDKCoreKit_Basics FBAEMKit FBSDKCoreKit FBSDKLoginKit FBSDKShareKit FBSDKGamingServicesKit].each do |name|
+    pod name, :path => sdk_root
+  end
+end

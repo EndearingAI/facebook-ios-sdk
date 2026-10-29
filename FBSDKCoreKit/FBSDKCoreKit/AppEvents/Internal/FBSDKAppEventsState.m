@@ -31,6 +31,18 @@
 @implementation FBSDKAppEventsState
 
 static NSArray<id<FBSDKEventsProcessing>> *_eventProcessors;
+static NSHashTable<FBSDKAppEventsState *> *trackingStates;
+
++ (void)eraseAllTrackingStates
+{
+  for (FBSDKAppEventsState *state in trackingStates.allObjects)
+  {
+    [state.mutableEvents removeAllObjects];
+    state->_tokenString = nil;
+    state->_appID = nil;
+    state->_numSkipped = 0;
+  }
+}
 
 + (nullable NSArray<id<FBSDKEventsProcessing>> *)eventProcessors
 {
@@ -44,22 +56,40 @@ static NSArray<id<FBSDKEventsProcessing>> *_eventProcessors;
 
 - (instancetype)initWithToken:(NSString *)tokenString appID:(NSString *)appID
 {
-  if ((self = [super init])) {
-    _tokenString = [tokenString copy];
-    _appID = [appID copy];
-    _mutableEvents = [NSMutableArray array];
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if ((self = [super init]))
+    {
+      @synchronized(FBSDKTrackingConsent.lock)
+      {
+        if (!trackingStates)
+        {
+          trackingStates = [NSHashTable weakObjectsHashTable];
+        }
+        [trackingStates addObject:self];
+        _trackingGeneration = FBSDKTrackingConsent.generation;
+      }
+      _tokenString = FBSDKTrackingConsent.isEnabled ? [tokenString copy] : nil;
+      _appID = FBSDKTrackingConsent.isEnabled ? [appID copy] : nil;
+      _mutableEvents = [NSMutableArray array];
+    }
+    return self;
   }
-  return self;
 }
 
 - (instancetype)copyWithZone:(NSZone *)zone
 {
-  FBSDKAppEventsState *copy = [[FBSDKAppEventsState allocWithZone:zone] initWithToken:_tokenString appID:_appID];
-  if (copy) {
-    [copy->_mutableEvents addObjectsFromArray:_mutableEvents];
-    copy->_numSkipped = _numSkipped;
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    FBSDKAppEventsState *copy = [[FBSDKAppEventsState allocWithZone:zone] initWithToken:_tokenString appID:_appID];
+    if (copy)
+    {
+      copy->_trackingGeneration = _trackingGeneration;
+      [copy->_mutableEvents addObjectsFromArray:_mutableEvents];
+      copy->_numSkipped = _numSkipped;
+    }
+    return copy;
   }
-  return copy;
 }
 
 #pragma mark - NSCoding
@@ -71,64 +101,101 @@ static NSArray<id<FBSDKEventsProcessing>> *_eventProcessors;
 
 - (instancetype)initWithCoder:(NSCoder *)decoder
 {
-  NSString *appID = [decoder decodeObjectOfClass:NSString.class forKey:FBSDK_APPEVENTSSTATE_APPID_KEY];
-  NSString *tokenString = [decoder decodeObjectOfClass:NSString.class forKey:FBSDK_APPEVENTSSTATE_TOKENSTRING_KEY];
-  NSArray<NSDictionary<NSString *, id> *> *events = [FBSDKTypeUtility arrayValue:[decoder decodeObjectOfClasses:
-                                                                                  [NSSet setWithArray:@[NSArray.class, NSDictionary.class, NSString.class, NSNumber.class]]
-                                                                                                         forKey:FBSDK_APPEVENTSSTATE_EVENTS_KEY]];
-  NSUInteger numSkipped = [[decoder decodeObjectOfClass:NSNumber.class forKey:FBSDK_APPEVENTSSTATE_NUMSKIPPED_KEY] unsignedIntegerValue];
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    NSString *appID = [decoder decodeObjectOfClass:NSString.class forKey:FBSDK_APPEVENTSSTATE_APPID_KEY];
+    NSString *tokenString = [decoder decodeObjectOfClass:NSString.class forKey:FBSDK_APPEVENTSSTATE_TOKENSTRING_KEY];
+    NSArray<NSDictionary<NSString *, id> *> *events = [FBSDKTypeUtility
+        arrayValue:[decoder
+                       decodeObjectOfClasses:
+                           [NSSet setWithArray:@[ NSArray.class, NSDictionary.class, NSString.class, NSNumber.class ]]
+                                      forKey:FBSDK_APPEVENTSSTATE_EVENTS_KEY]];
+    NSUInteger numSkipped =
+        [[decoder decodeObjectOfClass:NSNumber.class forKey:FBSDK_APPEVENTSSTATE_NUMSKIPPED_KEY] unsignedIntegerValue];
 
-  if ((self = [self initWithToken:tokenString appID:appID])) {
-    _mutableEvents = [NSMutableArray arrayWithArray:events];
-    _numSkipped = numSkipped;
+    if ((self = [self initWithToken:tokenString appID:appID]))
+    {
+      _trackingGeneration = (uint64_t)[decoder decodeInt64ForKey:@"consentGeneration"];
+      _mutableEvents = [NSMutableArray arrayWithArray:events];
+      _numSkipped = numSkipped;
+    }
+    return self;
   }
-  return self;
 }
 
 - (void)encodeWithCoder:(NSCoder *)encoder
 {
-  [encoder encodeObject:_appID forKey:FBSDK_APPEVENTSSTATE_APPID_KEY];
-  [encoder encodeObject:_tokenString forKey:FBSDK_APPEVENTSSTATE_TOKENSTRING_KEY];
-  [encoder encodeObject:@(_numSkipped) forKey:FBSDK_APPEVENTSSTATE_NUMSKIPPED_KEY];
-  [encoder encodeObject:_mutableEvents forKey:FBSDK_APPEVENTSSTATE_EVENTS_KEY];
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    [encoder encodeInt64:(int64_t)_trackingGeneration forKey:@"consentGeneration"];
+    [encoder encodeObject:_appID forKey:FBSDK_APPEVENTSSTATE_APPID_KEY];
+    [encoder encodeObject:_tokenString forKey:FBSDK_APPEVENTSSTATE_TOKENSTRING_KEY];
+    [encoder encodeObject:@(_numSkipped) forKey:FBSDK_APPEVENTSSTATE_NUMSKIPPED_KEY];
+    [encoder encodeObject:_mutableEvents forKey:FBSDK_APPEVENTSSTATE_EVENTS_KEY];
+  }
 }
 
 #pragma mark - Implementation
 
 - (NSArray<NSDictionary<NSString *, id> *> *)events
 {
-  return [_mutableEvents copy];
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    return [_mutableEvents copy];
+  }
 }
 
 - (void)addEventsFromAppEventState:(FBSDKAppEventsState *)appEventsState
 {
-  NSArray<NSDictionary<NSString *, id> *> *toAdd = appEventsState->_mutableEvents;
-  NSInteger excess = _mutableEvents.count + toAdd.count - FBSDK_APPEVENTSSTATE_MAX_EVENTS;
-  if (excess > 0) {
-    NSInteger range = FBSDK_APPEVENTSSTATE_MAX_EVENTS - _mutableEvents.count;
-    toAdd = [toAdd subarrayWithRange:NSMakeRange(0, range)];
-    _numSkipped += excess;
-  }
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if (![FBSDKTrackingConsent isCurrentGeneration:self.trackingGeneration] ||
+        ![FBSDKTrackingConsent isCurrentGeneration:appEventsState.trackingGeneration])
+    {
+      return;
+    }
+    NSArray<NSDictionary<NSString *, id> *> *toAdd = appEventsState->_mutableEvents;
+    NSInteger excess = _mutableEvents.count + toAdd.count - FBSDK_APPEVENTSSTATE_MAX_EVENTS;
+    if (excess > 0)
+    {
+      NSInteger range = FBSDK_APPEVENTSSTATE_MAX_EVENTS - _mutableEvents.count;
+      toAdd = [toAdd subarrayWithRange:NSMakeRange(0, range)];
+      _numSkipped += excess;
+    }
 
-  [_mutableEvents addObjectsFromArray:toAdd];
+    [_mutableEvents addObjectsFromArray:toAdd];
+  }
 }
 
 - (void)addEvent:(NSDictionary<NSString *, id> *)eventDictionary
       isImplicit:(BOOL)isImplicit
 withOperationalParameters:(nullable NSDictionary<FBSDKAppOperationalDataType, NSDictionary<NSString *, id> *> *)operationalParameters
 {
-  NSMutableDictionary<FBSDKAppOperationalDataType, NSDictionary<NSString *, id> *> *mutableOperationalParameters = operationalParameters.mutableCopy;
-  if (mutableOperationalParameters == nil) {
-    mutableOperationalParameters = [[NSMutableDictionary alloc] initWithDictionary:@{}];
-  }
-  if (_mutableEvents.count >= FBSDK_APPEVENTSSTATE_MAX_EVENTS) {
-    _numSkipped++;
-  } else {
-    [FBSDKTypeUtility array:_mutableEvents addObject:@{
-       @"event" : eventDictionary.mutableCopy,
-       FBSDK_APPEVENTSTATE_ISIMPLICIT_KEY : @(isImplicit),
-       FBSDK_OPERATIONAL_PARAMETERS_KEY : mutableOperationalParameters
-     }];
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if (![FBSDKTrackingConsent isCurrentGeneration:self.trackingGeneration])
+    {
+      return;
+    }
+    NSMutableDictionary<FBSDKAppOperationalDataType, NSDictionary<NSString *, id> *> *mutableOperationalParameters =
+        operationalParameters.mutableCopy;
+    if (mutableOperationalParameters == nil)
+    {
+      mutableOperationalParameters = [[NSMutableDictionary alloc] initWithDictionary:@{}];
+    }
+    if (_mutableEvents.count >= FBSDK_APPEVENTSSTATE_MAX_EVENTS)
+    {
+      _numSkipped++;
+    }
+    else
+    {
+      [FBSDKTypeUtility array:_mutableEvents
+                    addObject:@{
+                      @"event" : eventDictionary.mutableCopy,
+                      FBSDK_APPEVENTSTATE_ISIMPLICIT_KEY : @(isImplicit),
+                      FBSDK_OPERATIONAL_PARAMETERS_KEY : mutableOperationalParameters
+                    }];
+    }
   }
 }
 
@@ -179,34 +246,44 @@ withOperationalParameters:(nullable NSDictionary<FBSDKAppOperationalDataType, NS
 
 - (NSDictionary<NSString *, NSString *> *)JSONStringForEventsAndOperationalParametersIncludingImplicitEvents:(BOOL)includeImplicitEvents
 {
-  if (self.class.eventProcessors != nil) {
-    for (id<FBSDKEventsProcessing> processor in self.class.eventProcessors) {
-      [processor processEvents:_mutableEvents];
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if (self.class.eventProcessors != nil)
+    {
+      for (id<FBSDKEventsProcessing> processor in self.class.eventProcessors)
+      {
+        [processor processEvents:_mutableEvents];
+      }
     }
+    NSMutableArray<NSMutableDictionary<NSString *, id> *> *events =
+        [[NSMutableArray alloc] initWithCapacity:_mutableEvents.count];
+    NSMutableArray<NSMutableDictionary<FBSDKAppOperationalDataType, NSDictionary<NSString *, id> *> *>
+        *operationalParameters = [[NSMutableArray alloc] initWithCapacity:_mutableEvents.count];
+    for (NSDictionary<NSString *, id> *eventAndImplicitFlag in _mutableEvents)
+    {
+      const BOOL isImplicitEvent = [eventAndImplicitFlag[FBSDK_APPEVENTSTATE_ISIMPLICIT_KEY] boolValue];
+      if (!includeImplicitEvents && isImplicitEvent)
+      {
+        continue;
+      }
+      NSMutableDictionary<NSString *, id> *event = eventAndImplicitFlag[@"event"];
+      NSAssert(event != nil, @"event cannot be nil");
+      [event removeObjectForKey:FBSDK_APPEVENTSTATE_RECEIPTDATA_KEY];
+      NSMutableDictionary<FBSDKAppOperationalDataType, NSDictionary<NSString *, id> *> *operationalParameter =
+          eventAndImplicitFlag[FBSDK_OPERATIONAL_PARAMETERS_KEY];
+      if (operationalParameter == nil)
+      {
+        operationalParameter = [[NSMutableDictionary alloc] initWithDictionary:@{}];
+      }
+      [FBSDKTypeUtility array:events addObject:event];
+      [FBSDKTypeUtility array:operationalParameters addObject:operationalParameter];
+    }
+    NSString *customEvents = [FBSDKBasicUtility JSONStringForObject:events error:NULL invalidObjectHandler:NULL];
+    NSString *operationalData = [FBSDKBasicUtility JSONStringForObject:operationalParameters
+                                                                 error:NULL
+                                                  invalidObjectHandler:NULL];
+    return @{@"custom_events" : customEvents, @"operational_parameters" : operationalData};
   }
-  NSMutableArray<NSMutableDictionary<NSString *, id> *> *events = [[NSMutableArray alloc] initWithCapacity:_mutableEvents.count];
-  NSMutableArray<NSMutableDictionary<FBSDKAppOperationalDataType, NSDictionary<NSString *, id> *> *> *operationalParameters = [[NSMutableArray alloc] initWithCapacity:_mutableEvents.count];
-  for (NSDictionary<NSString *, id> *eventAndImplicitFlag in _mutableEvents) {
-    const BOOL isImplicitEvent = [eventAndImplicitFlag[FBSDK_APPEVENTSTATE_ISIMPLICIT_KEY] boolValue];
-    if (!includeImplicitEvents && isImplicitEvent) {
-      continue;
-    }
-    NSMutableDictionary<NSString *, id> *event = eventAndImplicitFlag[@"event"];
-    NSAssert(event != nil, @"event cannot be nil");
-    [event removeObjectForKey:FBSDK_APPEVENTSTATE_RECEIPTDATA_KEY];
-    NSMutableDictionary<FBSDKAppOperationalDataType, NSDictionary<NSString *, id> *> *operationalParameter = eventAndImplicitFlag[FBSDK_OPERATIONAL_PARAMETERS_KEY];
-    if (operationalParameter == nil) {
-      operationalParameter = [[NSMutableDictionary alloc] initWithDictionary:@{}];
-    }
-    [FBSDKTypeUtility array:events addObject:event];
-    [FBSDKTypeUtility array:operationalParameters addObject:operationalParameter];
-  }
-  NSString *customEvents = [FBSDKBasicUtility JSONStringForObject:events error:NULL invalidObjectHandler:NULL];
-  NSString *operationalData = [FBSDKBasicUtility JSONStringForObject:operationalParameters error:NULL invalidObjectHandler:NULL];
-  return @{
-    @"custom_events": customEvents,
-    @"operational_parameters": operationalData
-  };
 }
 
 @end

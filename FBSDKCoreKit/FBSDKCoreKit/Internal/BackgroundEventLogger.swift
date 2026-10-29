@@ -6,6 +6,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import FBSDKCoreKit_Basics
+
 struct BackgroundEventLogger: BackgroundEventLogging {
 
   private enum Keys {

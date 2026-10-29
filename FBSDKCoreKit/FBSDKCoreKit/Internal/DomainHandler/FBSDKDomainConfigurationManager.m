@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 #import "FBSDKDomainConfiguration.h"
 #import "FBSDKDomainConfigurationManager.h"
 #import "FBSDKInternalUtility+Internal.h"
@@ -74,75 +74,15 @@ graphRequestConnectionFactory:(id<FBSDKGraphRequestConnectionFactory>)graphReque
 
 - (nonnull FBSDKDomainConfiguration *)cachedDomainConfiguration
 {
-  @synchronized(self) {
-    // load the server configuration if we don't have it already
-    [self loadDomainConfigurationWithCompletionBlock:nil];
-
-    // use whatever configuration we have or the default
-    return self.domainConfiguration ?: [FBSDKDomainConfiguration defaultDomainConfiguration];
-  }
+  // Attribution routing uses the SDK's local domain contract. A cache read must
+  // never schedule configuration transport or restore a previous tracking generation.
+  return [FBSDKDomainConfiguration defaultDomainConfiguration];
 }
 
-- (void)loadDomainConfigurationWithCompletionBlock:(nullable FBSDKDomainConfigurationBlock)completionBlock {
-  BOOL shouldStartRequest = NO;
-  NSString *appID = nil;
-  id<FBSDKGraphRequestFactory> graphRequestFactory = nil;
-  id<FBSDKGraphRequestConnectionFactory> graphRequestConnectionFactory = nil;
-  @try {
-    @synchronized(self) {
-      // load the configuration from NSUserDefaults
-      if (!self.domainConfiguration) {
-        NSData *data = [self.dataStore fb_objectForKey:DOMAIN_CONFIGURATION_USER_DEFAULTS_KEY];
-        if ([data isKindOfClass:NSData.class]) {
-          // decode the configuration
-          id<FBSDKObjectDecoding> unarchiver = [FBSDKUnarchiverProvider createSecureUnarchiverFor:data];
-          FBSDKDomainConfiguration *domainConfiguration = nil;
-          @try {
-            domainConfiguration = [unarchiver decodeObjectOfClass:FBSDKDomainConfiguration.class forKey:NSKeyedArchiveRootObjectKey];
-          } @catch (NSException *ex) {
-            // Ignore decoding error
-          } @finally {
-            self.domainConfiguration = domainConfiguration;
-          }
-        }
-      }
-
-      BOOL hasValidConfiguration = self.requeryFinishedForAppStart
-        && (self.domainConfiguration && [self _domainConfigurationTimestampIsValid:self.domainConfiguration.timestamp])
-        && self.domainConfiguration.version >= FBSDKDomainConfigurationVersion;
-
-      // Kick off a background refresh unless we already have a valid, fresh configuration or a
-      // request is already in flight. The completion is NOT gated on this request: routing proceeds
-      // immediately on the cached (or ATT-safe default) configuration while the refresh runs.
-      if (!hasValidConfiguration && !self.loadingDomainConfiguration) {
-        self.loadingDomainConfiguration = YES;
-        // Capture the dependencies used by the background refresh here, while holding the lock, so
-        // the off-main work is self-contained and unaffected by any later re-`configure`.
-        appID = self.settings.appID;
-        graphRequestFactory = self.graphRequestFactory;
-        graphRequestConnectionFactory = self.graphRequestConnectionFactory;
-        shouldStartRequest = YES;
-      }
-    }
-  } @catch (NSException *exception) {}
-
-  // Complete from the cached/default configuration without waiting on the network. Firing on the
-  // main queue keeps the completion off the caller's synchronous launch frame.
+- (void)loadDomainConfigurationWithCompletionBlock:(nullable FBSDKDomainConfigurationBlock)completionBlock
+{
   if (completionBlock) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      completionBlock();
-    });
-  }
-
-  // Building and starting the request is expensive on the launch frame, so run it off the main
-  // thread. Keeping it outside the lock also ensures a concurrent routing read
-  // (cachedDomainConfiguration) never stalls waiting on the request start.
-  if (shouldStartRequest) {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-      [self startDomainConfigurationRequestWithGraphRequestFactory:graphRequestFactory
-                                    graphRequestConnectionFactory:graphRequestConnectionFactory
-                                                            appID:appID];
-    });
+    completionBlock();
   }
 }
 

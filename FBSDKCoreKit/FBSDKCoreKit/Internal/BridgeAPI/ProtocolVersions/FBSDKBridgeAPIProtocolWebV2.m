@@ -11,7 +11,7 @@
 #import "FBSDKBridgeAPIProtocolWebV2.h"
 
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 
 #import "FBSDKErrorReporter.h"
 #import "FBSDKInternalUtility+Internal.h"
