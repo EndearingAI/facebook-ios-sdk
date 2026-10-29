@@ -43,7 +43,8 @@ static BOOL (^eraseCoreState)(NSError **);
   {
     return ATTrackingManager.trackingAuthorizationStatus == ATTrackingManagerAuthorizationStatusAuthorized;
   }
-  return YES;
+  // An OS without ATT cannot supply the authorization required by this distribution.
+  return NO;
 }
 
 + (BOOL)isEnabled

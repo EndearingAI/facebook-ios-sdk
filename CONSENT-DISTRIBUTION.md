@@ -29,7 +29,8 @@ Actual ATT authorization is checked again at native event, anonymous-ID, IDFA,
 request-start, and response boundaries. A boundary that observes OS revocation
 withdraws the native grant and erases state. Foreground AppEvents observation
 also checks the boundary. A later ATT authorization does not itself re-enable
-the SDK; the app must make another explicit grant.
+the SDK; the app must make another explicit grant. An OS without the ATT API cannot
+supply authorization and all tracking grants are refused there.
 
 Withdraw synchronously with `setTrackingEnabled:NO error:&error`. The SDK first
 denies and advances its consent generation, then cancels transport and timers,

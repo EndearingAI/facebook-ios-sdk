@@ -44,7 +44,8 @@ final class GraphRequestQueueTests: XCTestCase {
     super.tearDown()
   }
 
-  func requestsAreEqual(request1: GraphRequestProtocol, request2: GraphRequestProtocol) -> Bool {
+  func requestsAreEqual(request1: GraphRequestProtocol?, request2: GraphRequestProtocol?) -> Bool {
+    guard let request1, let request2 else { return false }
     if request1.graphPath != request2.graphPath {
       return false
     }
