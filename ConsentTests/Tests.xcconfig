@@ -1,0 +1,6 @@
+#include "ConsentTests.xcconfig"
+PRODUCT_NAME = MetaConsentTests
+PRODUCT_BUNDLE_IDENTIFIER = com.endearing.MetaConsentTests
+TEST_HOST = $(BUILT_PRODUCTS_DIR)/MetaConsentTestHost.app/MetaConsentTestHost
+BUNDLE_LOADER = $(TEST_HOST)
+HEADER_SEARCH_PATHS = $(inherited) $(SRCROOT)/../FBSDKCoreKit/FBSDKCoreKit/**

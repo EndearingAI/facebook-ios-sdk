@@ -123,7 +123,13 @@ NS_SWIFT_NAME(AppEvents)
 @property (nullable, nonatomic, copy) NSString *userID;
 
 /// Returns generated anonymous id that persisted with current install of the app
-@property (nonatomic, readonly) NSString *anonymousID;
+/// Nil while denied. A new consent grant receives a new identity after withdrawal.
+@property(nullable, nonatomic, readonly) NSString *anonymousID;
+
+/// Process-local explicit grant, requiring current ATT authorization. Starts denied every process.
+/// Withdrawal fences requests before synchronously erasing tracking state; failure remains denied.
++ (BOOL)setTrackingEnabled:(BOOL)enabled error:(NSError *_Nullable *_Nullable)error;
++ (BOOL)isTrackingEnabled;
 
 /*
  * Basic event logging

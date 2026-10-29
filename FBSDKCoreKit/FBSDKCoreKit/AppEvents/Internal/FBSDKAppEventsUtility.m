@@ -72,67 +72,30 @@ static FBSDKAppEventsUtility *_shared;
                                                                                userID:(nullable NSString *)userID
                                                                              userData:(nullable NSString *)userData
 {
-  NSMutableDictionary<NSString *, NSString *> *parameters = [NSMutableDictionary dictionary];
-  [FBSDKTypeUtility dictionary:parameters setObject:eventCategory forKey:@"event"];
-
-  if (shouldAccessAdvertisingID) {
-    [FBSDKTypeUtility dictionary:parameters setObject:self.advertiserID forKey:@"advertiser_id"];
-  }
-
-  [FBSDKTypeUtility dictionary:parameters setObject:[FBSDKBasicUtility anonymousID] forKey:FBSDK_APPEVENTSUTILITY_ANONYMOUSID_KEY];
-
-  FBSDKAdvertisingTrackingStatus advertisingTrackingStatus = self.settings.advertisingTrackingStatus;
-  if (advertisingTrackingStatus != FBSDKAdvertisingTrackingUnspecified || [[FBSDKDomainHandler sharedInstance] isDomainHandlingEnabled]) {
-    [FBSDKTypeUtility dictionary:parameters setObject:@(self.settings.isAdvertiserTrackingEnabled).stringValue forKey:@"advertiser_tracking_enabled"];
-  }
-
-  if (userData) {
-    [FBSDKTypeUtility dictionary:parameters setObject:userData forKey:@"ud"];
-  } else {
-    // Preserving existing behavior which was to pass a hashed version of an empty
-    // dictionary. This is just in case anyone is relying on that parameter to be a string
-    // and not nil.
-    [FBSDKTypeUtility dictionary:parameters setObject:@"{}" forKey:@"ud"];
-  }
-
-  [FBSDKTypeUtility dictionary:parameters setObject:@(!self.settings.isEventDataUsageLimited).stringValue forKey:@"application_tracking_enabled"];
-  [FBSDKTypeUtility dictionary:parameters setObject:@(self.settings.isAdvertiserIDCollectionEnabled).stringValue forKey:@"advertiser_id_collection_enabled"];
-  NSNumber *addToMessagingCustomerBaseForWhatsApp = FBSDKSettings.sharedSettings.addToMessagingCustomerBaseForWhatsApp;
-  if (addToMessagingCustomerBaseForWhatsApp != nil) {
-    [FBSDKTypeUtility dictionary:parameters setObject:addToMessagingCustomerBaseForWhatsApp.stringValue forKey:@"add_to_messaging_customer_base_for_whatsapp"];
-  }
-
-  if (userID) {
-    [FBSDKTypeUtility dictionary:parameters setObject:userID forKey:@"app_user_id"];
-  }
-
-  [FBSDKTypeUtility dictionary:parameters setObject:[self getCampaignIDs] forKey:@"campaign_ids"];
-
-  [self.internalUtility extendDictionaryWithDataProcessingOptions:parameters];
-
-  [FBSDKTypeUtility dictionary:parameters
-                     setObject:self.deviceInformationProvider.encodedDeviceInfo
-                        forKey:self.deviceInformationProvider.storageKey];
-
-  static dispatch_once_t fetchBundleOnce;
-  static NSMutableArray<NSString *> *urlSchemes;
-
-  dispatch_once(&fetchBundleOnce, ^{
-    NSBundle *mainBundle = NSBundle.mainBundle;
-    urlSchemes = [NSMutableArray new];
-    for (NSDictionary<NSString *, id> *fields in [mainBundle objectForInfoDictionaryKey:@"CFBundleURLTypes"]) {
-      NSArray<NSString *> *schemesForType = fields[@"CFBundleURLSchemes"];
-      if (schemesForType) {
-        [urlSchemes addObjectsFromArray:schemesForType];
-      }
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    NSMutableDictionary<NSString *, NSString *> *parameters = [NSMutableDictionary new];
+    if (!FBSDKTrackingConsent.isEnabled)
+    {
+      return parameters;
     }
-  });
-
-  if (urlSchemes.count > 0) {
-    [FBSDKTypeUtility dictionary:parameters setObject:[FBSDKBasicUtility JSONStringForObject:urlSchemes error:NULL invalidObjectHandler:NULL] forKey:@"url_schemes"];
+    parameters[@"event"] = eventCategory;
+    parameters[FBSDK_APPEVENTSUTILITY_ANONYMOUSID_KEY] = FBSDKBasicUtility.anonymousID;
+    if (shouldAccessAdvertisingID && self.advertiserID)
+    {
+      parameters[@"advertiser_id"] = self.advertiserID;
+    }
+    parameters[@"advertiser_tracking_enabled"] = @"1";
+    parameters[@"application_tracking_enabled"] = @"1";
+    parameters[@"advertiser_id_collection_enabled"] = self.settings.isAdvertiserIDCollectionEnabled ? @"1" : @"0";
+    return parameters;
   }
+}
 
-  return parameters;
+- (void)clearTrackingIdentifiers
+{
+  self.cachedAdvertiserIdentifierString = nil;
+  self.cachedAdvertiserIdentifierManager = nil;
 }
 
 - (nullable NSString *)advertiserID
@@ -146,28 +109,18 @@ static FBSDKAppEventsUtility *_shared;
 - (nullable NSString *)_advertiserIDFromDynamicFrameworkResolver:(id<FBSDKDynamicFrameworkResolving>)dynamicFrameworkResolver
                                           shouldUseCachedManager:(BOOL)shouldUseCachedManager
 {
-  if (!self.settings.isAdvertiserIDCollectionEnabled) {
-    return nil;
-  }
-
-  if (@available(iOS 14.0, *)) {
-    if (!self.appEventsConfigurationProvider.cachedAppEventsConfiguration.advertiserIDCollectionEnabled) {
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if (!FBSDKTrackingConsent.isEnabled || !self.settings.isAdvertiserIDCollectionEnabled)
+    {
+      [self clearTrackingIdentifiers];
       return nil;
     }
+    ASIdentifierManager *manager = [self _asIdentifierManagerWithShouldUseCachedManager:NO
+                                                               dynamicFrameworkResolver:dynamicFrameworkResolver];
+    NSString *identifier = manager.advertisingIdentifier.UUIDString;
+    return [identifier isEqualToString:@"00000000-0000-0000-0000-000000000000"] ? nil : identifier;
   }
-
-  // Return cached advertiser ID string if available to avoid expensive IPC on the main thread.
-  // The advertising identifier is stable for the lifetime of the app process and only changes
-  // when the user resets it via Settings, so caching per-session is safe.
-  if (self.cachedAdvertiserIdentifierString) {
-    return self.cachedAdvertiserIdentifierString;
-  }
-
-  ASIdentifierManager *manager = [self _asIdentifierManagerWithShouldUseCachedManager:shouldUseCachedManager
-                                                             dynamicFrameworkResolver:dynamicFrameworkResolver];
-  NSString *advertiserID = manager.advertisingIdentifier.UUIDString;
-  self.cachedAdvertiserIdentifierString = advertiserID;
-  return advertiserID;
 }
 
 - (ASIdentifierManager *)_asIdentifierManagerWithShouldUseCachedManager:(BOOL)shouldUseCachedManager
@@ -471,6 +424,10 @@ static FBSDKAppEventsUtility *_shared;
 
 - (BOOL)shouldDropAppEvents
 {
+  if (!FBSDKTrackingConsent.isEnabled)
+  {
+    return YES;
+  }
   if (@available(iOS 14.0, *)) {
     if ([self.settings advertisingTrackingStatus] == FBSDKAdvertisingTrackingDisallowed && !self.appEventsConfigurationProvider.cachedAppEventsConfiguration.eventCollectionEnabled) {
       return YES;

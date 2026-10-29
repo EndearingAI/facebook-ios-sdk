@@ -10,6 +10,7 @@
 
 #import <FBSDKCoreKit_Basics/FBSDKNetworkTask.h>
 #import <FBSDKCoreKit_Basics/FBSDKURLSessionProviding.h>
+#import "FBSDKConsentNetworkTask.h"
 
 @implementation FBSDKURLSessionTask
 
@@ -27,7 +28,7 @@
 {
   if ((self = [self init])) {
     self.requestStartTime = (uint64_t)([self.requestStartDate timeIntervalSince1970] * 1000);
-    self.task = [session fb_dataTaskWithRequest:request completionHandler:handler];
+    self.task = [[FBSDKConsentNetworkTask alloc] initWithRequest:request session:session completion:handler];
   }
   return self;
 }

@@ -33,6 +33,7 @@ static NSString *const kUserAgentBase = @"FBiOSSDK";
 static NSString *const kBatchRestMethodBaseURL = @"method/";
 
 static NSTimeInterval g_defaultTimeout = 60.0;
+static NSHashTable<FBSDKGraphRequestConnection *> *trackingConnections;
 
 #if !TARGET_OS_TV
 static FBSDKAccessToken *_Nullable _CreateExpiredAccessToken(FBSDKAccessToken *accessToken)
@@ -65,6 +66,8 @@ static FBSDKAccessToken *_Nullable _CreateExpiredAccessToken(FBSDKAccessToken *a
 <NSURLSessionDataDelegate, FBSDKGraphErrorRecoveryProcessorDelegate>
 
 @property (class, nonatomic) BOOL hasBeenConfigured;
+@property(nonatomic) uint64_t trackingGeneration;
+@property(nullable, nonatomic, copy) dispatch_block_t pendingConsentResponse;
 
 @end
 
@@ -265,6 +268,15 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
 - (instancetype)init
 {
   if ((self = [super init])) {
+    @synchronized(FBSDKTrackingConsent.lock)
+    {
+      if (!trackingConnections)
+      {
+        trackingConnections = [NSHashTable weakObjectsHashTable];
+      }
+      [trackingConnections addObject:self];
+      _trackingGeneration = FBSDKTrackingConsent.generation;
+    }
     _timeout = g_defaultTimeout;
     _session = [self.class.sessionProxyFactory createSessionProxyWithDelegate:self queue:_delegateQueue];
     _state = FBSDKGraphRequestConnectionStateCreated;
@@ -311,23 +323,42 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
         parameters:(nullable NSDictionary<NSString *, id> *)parameters
         completion:(FBSDKGraphRequestCompletion)completion
 {
-  if (self.state != FBSDKGraphRequestConnectionStateCreated) {
-    @throw [NSException exceptionWithName:NSInternalInconsistencyException
-                                   reason:@"Cannot add requests once started or if a URLRequest is set"
-                                 userInfo:nil];
-  }
-  FBSDKGraphRequestMetadata *metadata = [[FBSDKGraphRequestMetadata alloc] initWithRequest:request
-                                                                         completionHandler:completion
-                                                                           batchParameters:parameters];
-  if (@available(iOS 14.5, *)) {
-    // Add request if it is for fetching the domain config or we have the domain config
-    if ([FBSDKGraphRequest isForFetchingDomainConfiguration:metadata.request] || [FBSDKGraphRequest isForDomainReport:metadata.request] || [self.class didFetchDomainConfiguration]) {
-      [FBSDKTypeUtility array:self.requests addObject:metadata];
-    } else {
-      [[FBSDKGraphRequestQueue sharedInstance] enqueueRequestMetadata:metadata];
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if (![FBSDKTrackingConsent isCurrentGeneration:self.trackingGeneration])
+    {
+      if (completion)
+      {
+        completion(self, nil, FBSDKTrackingConsent.cancellationError);
+      }
+      return;
     }
-  } else {
-    [FBSDKTypeUtility array:self.requests addObject:metadata];
+    if (self.state != FBSDKGraphRequestConnectionStateCreated)
+    {
+      @throw [NSException exceptionWithName:NSInternalInconsistencyException
+                                     reason:@"Cannot add requests once started or if a URLRequest is set"
+                                   userInfo:nil];
+    }
+    FBSDKGraphRequestMetadata *metadata = [[FBSDKGraphRequestMetadata alloc] initWithRequest:request
+                                                                           completionHandler:completion
+                                                                             batchParameters:parameters];
+    if (@available(iOS 14.5, *))
+    {
+      // Add request if it is for fetching the domain config or we have the domain config
+      if ([FBSDKGraphRequest isForFetchingDomainConfiguration:metadata.request] ||
+          [FBSDKGraphRequest isForDomainReport:metadata.request] || [self.class didFetchDomainConfiguration])
+      {
+        [FBSDKTypeUtility array:self.requests addObject:metadata];
+      }
+      else
+      {
+        [[FBSDKGraphRequestQueue sharedInstance] enqueueRequestMetadata:metadata];
+      }
+    }
+    else
+    {
+      [FBSDKTypeUtility array:self.requests addObject:metadata];
+    }
   }
 }
 
@@ -355,10 +386,32 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
   }
 }
 
++ (void)cancelAllForTrackingWithdrawal
+{
+  for (FBSDKGraphRequestConnection *connection in trackingConnections.allObjects)
+  {
+    [connection cancel];
+  }
+}
+
 - (void)cancel
 {
-  self.state = FBSDKGraphRequestConnectionStateCancelled;
-  [self.session invalidateAndCancel];
+  [self cancelWithError:FBSDKTrackingConsent.cancellationError];
+}
+
+- (void)cancelWithError:(NSError *)error
+{
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    self.state = FBSDKGraphRequestConnectionStateCancelled;
+    self.pendingConsentResponse = nil;
+    [self.session invalidateAndCancel];
+    for (FBSDKGraphRequestMetadata *metadata in self.requests.copy)
+    {
+      [metadata invokeCompletionHandlerForConnection:self withResults:nil error:error];
+    }
+    [self.requests removeAllObjects];
+  }
 }
 
 - (void)overrideGraphAPIVersion:(NSString *)version
@@ -368,68 +421,97 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
 
 - (void)start
 {
-  if (![self.class canMakeRequests]) {
-    NSString *msg = @"FBSDKGraphRequestConnection cannot be started before Facebook SDK initialized.";
-    NSError *error = [self.class.errorFactory unknownErrorWithMessage:msg userInfo:nil];
-    // TODO: Use a logger provider for this.
-    [self.logger.class singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors
-                                 logEntry:msg];
-    self.state = FBSDKGraphRequestConnectionStateCancelled;
-    [self completeFBSDKURLSessionWithResponse:nil data:nil networkError:error];
-
-    return;
-  }
-  
-  if (self.requests.count == 0) {
-    return;
-  }
-  
-  if (self.state != FBSDKGraphRequestConnectionStateCreated
-      && self.state != FBSDKGraphRequestConnectionStateSerialized) {
-    [self.logger.class singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors
-                                 logEntry:@"FBSDKGraphRequestConnection cannot be started again."];
-    return;
-  }
-  if ([self shouldPiggyBackRequests]) {
-    [self.class.piggybackManager addPiggybackRequests:self];
-  }
-  NSMutableURLRequest *request = [self requestWithBatch:self.requests timeout:self.timeout];
-
-  self.state = FBSDKGraphRequestConnectionStateStarted;
-
-  [self logRequest:request bodyLength:0 bodyLogger:nil attachmentLogger:nil];
-  self.requestStartTime = [FBSDKInternalUtility.sharedUtility currentTimeInMilliseconds];
-
-  FBSDKURLSessionTaskBlock completionHandler = ^(NSData *responseDataV1, NSURLResponse *responseV1, NSError *errorV1) {
-    FBSDKURLSessionTaskBlock handler = ^(NSData *responseDataV2,
-                                         NSURLResponse *responseV2,
-                                         NSError *errorV2) {
-      [self completeFBSDKURLSessionWithResponse:responseV2
-                                           data:responseDataV2
-                                   networkError:errorV2];
-    };
-
-    if (errorV1) {
-      [self _taskDidCompleteWithError:errorV1 handler:handler];
-    } else {
-      [self taskDidCompleteWithResponse:responseV1 data:responseDataV1 requestStartTime:self.requestStartTime handler:handler];
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if (![FBSDKTrackingConsent isCurrentGeneration:self.trackingGeneration])
+    {
+      [self cancel];
+      return;
     }
-  };
-  
-  if ([[FBSDKShimGraphRequestInterceptor shared] shouldInterceptRequest:request]) {
-    [[FBSDKShimGraphRequestInterceptor shared] executeWithRequest:request completionHandler:completionHandler];
-  } else {
-    [self.session executeURLRequest:request completionHandler:completionHandler];
-  }
+    for (FBSDKGraphRequestMetadata *metadata in self.requests)
+    {
+      id category = metadata.request.parameters[@"event"];
+      BOOL supportedCategory = [category isEqual:@"MOBILE_APP_INSTALL"] || [category isEqual:@"CUSTOM_APP_EVENTS"];
+      if (!metadata.request.forAppEvents || ![metadata.request.graphPath hasSuffix:@"/activities"] ||
+          !supportedCategory)
+      {
+        NSError *error = [NSError
+            errorWithDomain:@"com.endearing.facebook.attribution"
+                       code:3
+                   userInfo:@{
+                     NSLocalizedDescriptionKey : @"This Meta SDK distribution supports explicit install/app-open "
+                                                 @"attribution only. The unsupported Graph request was not sent."
+                   }];
+        [self cancelWithError:error];
+        return;
+      }
+    }
+    if (![self.class canMakeRequests])
+    {
+      NSString *msg = @"FBSDKGraphRequestConnection cannot be started before Facebook SDK initialized.";
+      NSError *error = [self.class.errorFactory unknownErrorWithMessage:msg userInfo:nil];
+      // TODO: Use a logger provider for this.
+      [self.logger.class singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors logEntry:msg];
+      self.state = FBSDKGraphRequestConnectionStateCancelled;
+      [self completeFBSDKURLSessionWithResponse:nil data:nil networkError:error];
 
-  id<FBSDKGraphRequestConnectionDelegate> delegate = self.delegate;
-  if ([delegate respondsToSelector:@selector(requestConnectionWillBeginLoading:)]) {
-    if (self.delegateQueue) {
-      [self.delegateQueue addOperationWithBlock:^{
+      return;
+    }
+
+    if (self.requests.count == 0)
+    {
+      return;
+    }
+
+    if (self.state != FBSDKGraphRequestConnectionStateCreated &&
+        self.state != FBSDKGraphRequestConnectionStateSerialized)
+    {
+      [self.logger.class singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors
+                                   logEntry:@"FBSDKGraphRequestConnection cannot be started again."];
+      return;
+    }
+    // Configuration, token refresh, and diagnostic piggyback requests are disabled.
+    NSMutableURLRequest *request = [self requestWithBatch:self.requests timeout:self.timeout];
+
+    self.state = FBSDKGraphRequestConnectionStateStarted;
+
+    [self logRequest:request bodyLength:0 bodyLogger:nil attachmentLogger:nil];
+    self.requestStartTime = [FBSDKInternalUtility.sharedUtility currentTimeInMilliseconds];
+
+    FBSDKURLSessionTaskBlock completionHandler =
+        ^(NSData *responseDataV1, NSURLResponse *responseV1, NSError *errorV1) {
+          FBSDKURLSessionTaskBlock handler = ^(NSData *responseDataV2, NSURLResponse *responseV2, NSError *errorV2) {
+            [self completeFBSDKURLSessionWithResponse:responseV2 data:responseDataV2 networkError:errorV2];
+          };
+
+          if (errorV1)
+          {
+            [self _taskDidCompleteWithError:errorV1 handler:handler];
+          }
+          else
+          {
+            [self taskDidCompleteWithResponse:responseV1
+                                         data:responseDataV1
+                             requestStartTime:self.requestStartTime
+                                      handler:handler];
+          }
+        };
+
+    [self.session executeURLRequest:request completionHandler:completionHandler];
+
+    id<FBSDKGraphRequestConnectionDelegate> delegate = self.delegate;
+    if ([delegate respondsToSelector:@selector(requestConnectionWillBeginLoading:)])
+    {
+      if (self.delegateQueue)
+      {
+        [self.delegateQueue addOperationWithBlock:^{
+          [delegate requestConnectionWillBeginLoading:self];
+        }];
+      }
+      else
+      {
         [delegate requestConnectionWillBeginLoading:self];
-      }];
-    } else {
-      [delegate requestConnectionWillBeginLoading:self];
+      }
     }
   }
 }
@@ -1197,9 +1279,32 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
              response:(NSURLResponse *)response
          responseData:(NSData *)responseData
 {
-  if (handler != nil) {
-    dispatch_async(dispatch_get_main_queue(), ^{
+  @synchronized(FBSDKTrackingConsent.lock)
+  {
+    if (!handler)
+    {
+      return;
+    }
+    if (![FBSDKTrackingConsent isCurrentGeneration:self.trackingGeneration])
+    {
+      handler(nil, nil, FBSDKTrackingConsent.cancellationError);
+      return;
+    }
+    // The queued main block retains only the connection. Withdrawal immediately releases
+    // its response payload and settles metadata; the queued block then has nothing to apply.
+    self.pendingConsentResponse = ^{
       handler(responseData, response, error);
+    };
+    dispatch_async(dispatch_get_main_queue(), ^{
+      @synchronized(FBSDKTrackingConsent.lock)
+      {
+        dispatch_block_t delivery = self.pendingConsentResponse;
+        self.pendingConsentResponse = nil;
+        if ([FBSDKTrackingConsent isCurrentGeneration:self.trackingGeneration] && delivery)
+        {
+          delivery();
+        }
+      }
     });
   }
 }

@@ -76,7 +76,7 @@ public class FBSDKTransformerGraphRequestFactory: NSObject {
         request.httpBody = jsonData
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
-        URLSession.shared.dataTask(with: request) { _, response, error in
+        URLSession.shared.fb_dataTask(with: request) { _, response, error in
           self.serialQueue.async {
             guard error == nil,
                   let httpResponse = response as? HTTPURLResponse,
@@ -86,7 +86,7 @@ public class FBSDKTransformerGraphRequestFactory: NSObject {
             }
           }
         }
-        .resume()
+        .fb_resume()
       } catch {
         _Logger.singleShotLogEntry(.developerErrors, logEntry: "CAPI Gateway event serialization failed: \(error)")
         return

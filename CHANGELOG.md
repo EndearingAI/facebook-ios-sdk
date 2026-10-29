@@ -10,6 +10,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## Unreleased
 
+### Endearing maintained consent distribution (18.1.1)
+- Added `+[FBSDKAppEvents setTrackingEnabled:error:]` and `+[FBSDKAppEvents isTrackingEnabled]`.
+- Tracking starts denied every process and requires an explicit grant plus current ATT authorization.
+- Withdrawal cancels and settles native requests, fences queued/late work, erases tracking state,
+  and creates a fresh anonymous identity on the next grant. Erasure failures remain denied and return an error.
+- Only explicit install/app-open attribution is enabled. Automatic events, diagnostics, IAP,
+  SKAN, AEM, codeless, model/metadata collection, user data, and extra device information are disabled.
+- All six CocoaPods specs compile maintained source instead of downloading upstream binaries.
+
+
 [Full Changelog](https://github.com/facebook/facebook-ios-sdk/compare/v18.1.1...HEAD)
 
 ## 18.1.1

@@ -35,6 +35,7 @@ NS_SWIFT_NAME(_TimeSpentData)
 - (void)setSourceApplication:(nullable NSString *)sourceApplication openURL:(nullable NSURL *)url;
 - (void)setSourceApplication:(nullable NSString *)sourceApplication isFromAppLink:(BOOL)isFromAppLink;
 - (void)registerAutoResetSourceApplication;
++ (void)eraseAllTrackingState;
 - (void)suspend;
 - (void)restore:(BOOL)calledFromActivateApp;
 

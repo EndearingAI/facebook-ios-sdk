@@ -19,6 +19,7 @@
 #import <FBSDKCoreKit_Basics/FBSDKLinking.h>
 #import <FBSDKCoreKit_Basics/FBSDKNetworkTask.h>
 #import <FBSDKCoreKit_Basics/FBSDKTypeUtility.h>
+#import <FBSDKCoreKit_Basics/FBSDKTrackingConsent.h>
 #import <FBSDKCoreKit_Basics/FBSDKURLSession.h>
 #import <FBSDKCoreKit_Basics/FBSDKURLSessionTask.h>
 #import <FBSDKCoreKit_Basics/FBSDKURLSessionProviding.h>

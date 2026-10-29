@@ -7,6 +7,7 @@
  */
 
 import FBSDKCoreKit
+import FBSDKCoreKit_Basics
 import Foundation
 import Security
 
@@ -130,12 +131,12 @@ final class DirectRefreshSession {
     // URLSession data-task callbacks fire on the session's delegate queue (a
     // background queue by default). The completion eventually drives UI in
     // app code, so deliver it on the main queue to keep the public API safe.
-    let task = session.dataTask(with: request) { data, _, error in
+    let task = session.fb_dataTask(with: request) { data, _, error in
       DispatchQueue.main.async {
         Self.handleResponse(data: data, error: error, completion: completion)
       }
     }
-    task.resume()
+    task.fb_resume()
   }
 
   // MARK: - Response handling

@@ -99,3 +99,4 @@ internal/scripts/Runner/.swiftpm
 # schemes are shared, not per-user) injects the SDK's schemes into the scheme
 # list of every app that consumes it via SPM (#2515).
 .swiftpm/
+ConsentTests/MetaConsentTests.xcodeproj/

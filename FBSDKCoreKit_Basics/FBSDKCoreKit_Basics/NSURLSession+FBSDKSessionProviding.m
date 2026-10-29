@@ -8,6 +8,7 @@
 
 #import <FBSDKCoreKit_Basics/FBSDKLinking.h>
 #import <FBSDKCoreKit_Basics/FBSDKURLSessionProviding.h>
+#import "FBSDKConsentNetworkTask.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -17,7 +18,7 @@ FB_LINK_CATEGORY_IMPLEMENTATION(NSURLSession, URLSessionProviding)
 - (id<FBSDKNetworkTask>)fb_dataTaskWithRequest:(NSURLRequest *)request
                              completionHandler:(void (^)(NSData * _Nullable, NSURLResponse * _Nullable, NSError * _Nullable))completionHandler
 {
-  return [self dataTaskWithRequest:request completionHandler:completionHandler];
+  return [[FBSDKConsentNetworkTask alloc] initWithRequest:request session:self completion:completionHandler];
 }
 
 @end

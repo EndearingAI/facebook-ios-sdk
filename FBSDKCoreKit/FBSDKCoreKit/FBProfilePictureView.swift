@@ -7,6 +7,7 @@
  */
 
 import AppTrackingTransparency
+import FBSDKCoreKit_Basics
 import UIKit
 
 /// A view to display a profile picture.
@@ -258,7 +259,7 @@ public final class FBProfilePictureView: UIView {
   func fetchAndSetImage(with imageURL: URL, state: ProfilePictureViewState) {
     let request = URLRequest(url: imageURL)
 
-    URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+    URLSession.shared.fb_dataTask(with: request) { [weak self] data, _, error in
       guard error == nil,
             let data = data else {
         return
@@ -266,7 +267,7 @@ public final class FBProfilePictureView: UIView {
 
       self?.updateImage(data: data, state: state)
     }
-    .resume()
+    .fb_resume()
   }
 
   func shouldImageFit() -> Bool {

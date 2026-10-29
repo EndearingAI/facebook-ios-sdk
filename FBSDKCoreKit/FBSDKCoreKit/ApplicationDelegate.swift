@@ -6,6 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import FBSDKCoreKit_Basics
 import Foundation
 import UIKit
 
@@ -22,13 +23,19 @@ import UIKit
 public final class ApplicationDelegate: NSObject {
 
   var applicationObservers = NSHashTable<FBSDKApplicationObserving>(options: .weakMemory)
-  let components: CoreKitComponents
-  let configurator: CoreKitConfiguring
+  private let suppliedComponents: CoreKitComponents?
+  private let suppliedConfigurator: CoreKitConfiguring?
+  private lazy var defaultComponents = CoreKitComponents.default
+  private lazy var defaultConfigurator = CoreKitConfigurator(components: components)
+  var components: CoreKitComponents { suppliedComponents ?? defaultComponents }
+  var configurator: CoreKitConfiguring { suppliedConfigurator ?? defaultConfigurator }
   var isAppLaunched = false
   private var hasInitializeBeenCalled = false
   var applicationState = UIApplication.State.active {
     didSet {
-      components.appEvents.setApplicationState(applicationState)
+      if AppEvents.isTrackingEnabled() {
+        components.appEvents.setApplicationState(applicationState)
+      }
     }
   }
 
@@ -43,14 +50,15 @@ public final class ApplicationDelegate: NSObject {
   @objc(sharedInstance)
   public private(set) static var shared = ApplicationDelegate()
 
-  override convenience init() {
-    let components = CoreKitComponents.default
-    self.init(components: components, configurator: CoreKitConfigurator(components: components))
+  override init() {
+    suppliedComponents = nil
+    suppliedConfigurator = nil
+    super.init()
   }
 
   init(components: CoreKitComponents, configurator: CoreKitConfiguring) {
-    self.components = components
-    self.configurator = configurator
+    suppliedComponents = components
+    suppliedConfigurator = configurator
     super.init()
   }
 
@@ -71,33 +79,24 @@ public final class ApplicationDelegate: NSObject {
     launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
     completionBlock: _DomainConfigurationBlock?
   ) {
-    guard !hasInitializeBeenCalled else { return }
-
-    hasInitializeBeenCalled = true
-
-    // DO NOT MOVE THIS CALL
-    // Dependencies MUST be configured before they are used
-    configurator.performConfiguration()
-    initializeTokenCache()
-    initializeProfile()
-    // Arm the App Events persist-on-close observers synchronously, before SDK setup is deferred
-    // past the first frame. This ensures events logged during the deferral window are persisted
-    // (and re-sent next launch) rather than lost if the app is closed before doSDKSetup runs.
-    components.appEvents.startObservingApplicationStatePersistenceNotifications()
-    if #available(iOS 14.5, *) {
-      fetchDomainConfiguration {
-        // The completion now fires from the cached/default domain configuration without waiting on
-        // the network. Defer SDK setup until after the first frame so it does not serialize ahead
-        // of the initial render.
-        self.scheduleAfterFirstFrame {
-          GraphRequestConnection.setDidFetchDomainConfiguration()
-          self.doSDKSetup(launchOptions: launchOptions, completionBlock: completionBlock)
-          GraphRequestQueue.sharedInstance().flush() // Flush any queued requests
-        }
-      }
-    } else {
-      doSDKSetup(launchOptions: launchOptions, completionBlock: completionBlock)
+    objc_sync_enter(_TrackingConsent.lock)
+    defer { objc_sync_exit(_TrackingConsent.lock) }
+    // Initialization has no asynchronous network prerequisite in this attribution-only distribution.
+    // Every path settles the private completion, including denied and repeated initialization.
+    guard AppEvents.isTrackingEnabled() else {
+      completionBlock?()
+      return
     }
+    guard !hasInitializeBeenCalled else {
+      completionBlock?()
+      return
+    }
+    configurator.performConfiguration()
+    hasInitializeBeenCalled = true
+    GraphRequestConnection.setCanMakeRequests()
+    GraphRequestConnection.setDidFetchDomainConfiguration()
+    components.appEvents.startObservingApplicationLifecycleNotifications()
+    completionBlock?()
   }
 
   private func doSDKSetup(
@@ -314,6 +313,7 @@ public final class ApplicationDelegate: NSObject {
     sourceApplication: String?,
     annotation: Any?
   ) -> Bool {
+    guard AppEvents.isTrackingEnabled() else { return false }
     components.appEvents.setSourceApplication(sourceApplication, open: url)
 
     components.featureChecker.check(.AEM) { enabled in
@@ -370,24 +370,8 @@ public final class ApplicationDelegate: NSObject {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
-    guard
-      !isAppLaunched,
-      !hasInitializeBeenCalled
-    else { return false }
-
-    initializeSDK(launchOptions: launchOptions) {
-      self.isAppLaunched = true
-
-      self.fetchServerConfiguration()
-
-      if self.components.settings.isAutoLogAppEventsEnabled {
-        self.logSDKInitialize()
-      }
-
-      self.checkAuthentication()
-      _ = self.notifyLaunchObservers(application: application, launchOptions: launchOptions)
-    }
-    return true
+    initializeSDK(launchOptions: launchOptions, completionBlock: nil)
+    return AppEvents.isTrackingEnabled()
   }
 
   private func initializeTokenCache() {
@@ -445,37 +429,12 @@ public final class ApplicationDelegate: NSObject {
 
   func applicationDidEnterBackground(_ notification: Notification) {
     applicationState = .background
-    applicationObservers.allObjects.forEach { observer in
-      observer.applicationDidEnterBackground?(notification.object as? UIApplication)
-    }
-    IAPTransactionCache.shared.trimIfNeeded()
-    if IAPDedupeProcessor.shared.isEnabled {
-      IAPDedupeProcessor.shared.saveNonProcessedEvents()
-    }
   }
 
   func applicationDidBecomeActive(_ notification: Notification?) {
+    // Querying the native boundary notices an OS withdrawal before any explicit activation.
+    _ = AppEvents.isTrackingEnabled()
     applicationState = .active
-
-    // Auto log basic events in case auto-logging of app events is enabled
-    if components.settings.isAutoLogAppEventsEnabled {
-      components.appEvents.activateApp()
-    }
-
-    if components.featureChecker.isEnabled(.skAdNetworkV4) {
-      components.skAdNetworkReporterV2?.checkAndRevokeTimer()
-    } else {
-      components.skAdNetworkReporter?.checkAndRevokeTimer()
-    }
-
-    applicationObservers.allObjects.forEach { observer in
-      observer.applicationDidBecomeActive?(notification?.object as? UIApplication)
-    }
-    if #available(iOS 15.0, *) {
-      Task {
-        await IAPTransactionObserver.shared.observeNewTransactions()
-      }
-    }
   }
 
   func applicationWillResignActive(_ notification: Notification) {

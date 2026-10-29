@@ -43,12 +43,23 @@ Pod::Spec.new do |s|
     s.author       = 'Facebook'
 
     s.platform     = :ios
-    s.ios.deployment_target = '12.0'
+    s.ios.deployment_target = '13.0'
 
-    s.source = {
-      http: "https://github.com/facebook/facebook-ios-sdk/releases/download/v#{s.version}/FacebookSDK_Dynamic.xcframework.zip",
-      sha1: '93b84392c4bcc4399e9abd4c50b80e6a3c9f95c2'
-    }
-    s.vendored_frameworks = 'XCFrameworks/FBAEMKit.xcframework'
+    # Maintained source distribution: never download upstream prebuilt XCFrameworks.
+  s.source = { git: 'https://github.com/EndearingAI/facebook-ios-sdk.git', branch: 'codex/consent-control' }
+  s.source_files = 'FBAEMKit/FBAEMKit/**/*.{h,m,mm,swift}'
+  s.swift_version = '5.0'
+  s.requires_arc = true
+  s.frameworks = 'Foundation', 'UIKit'
+  s.libraries = 'z', 'c++'
+  s.prefix_header_contents = '#import <TargetConditionals.h>'
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'ENABLE_TESTABILITY' => 'YES',
+    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FBSDKCOCOAPODS=1',
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++11',
+    'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/FBAEMKit/FBAEMKit/**"'
+  }
+  s.resource_bundles = { 'FBAEMKit_Privacy' => ['FBAEMKit/FBAEMKit/PrivacyInfo.xcprivacy'] }
     s.dependency 'FBSDKCoreKit_Basics', "#{s.version}"
   end

@@ -49,25 +49,29 @@ WORKSPACE="FacebookSDK.xcworkspace"
 # OS resolves against the latest installed runtime, and a device from an older runtime does not
 # exist there (an "iPhone 15" picked off an iOS 17 runtime fails on an Xcode whose latest is
 # iOS 26). Sorting by OS descending also keeps this on the newest runtime as Xcode versions change.
-DESTINATION_SPEC=$(xcodebuild -scheme "$SCHEME" -workspace "$WORKSPACE" -showdestinations 2>/dev/null \
-  | grep 'platform:iOS Simulator' \
-  | grep 'name:iPhone' \
-  | sed -n 's/.*OS:\([0-9][0-9.]*\).*name:\(.*\) }.*/\1|\2/p' \
-  | sort -t'|' -k1,1 -Vr \
-  | head -1 || true)
+if [ -n "${FBSDK_TEST_DESTINATION:-}" ]; then
+  DESTINATION="$FBSDK_TEST_DESTINATION"
+else
+  DESTINATION_SPEC=$(xcodebuild -scheme "$SCHEME" -workspace "$WORKSPACE" -showdestinations 2>/dev/null \
+    | grep 'platform:iOS Simulator' \
+    | grep 'name:iPhone' \
+    | sed -n 's/.*OS:\([0-9][0-9.]*\).*name:\(.*\) }.*/\1|\2/p' \
+    | sort -t'|' -k1,1 -Vr \
+    | head -1 || true)
 
-# `|| true` above so that a scheme with no matching destination reaches this check rather than
-# aborting the pipeline under `set -e`, which exits silently with no output at all.
-if [ -z "$DESTINATION_SPEC" ]; then
-  echo "Error: no iPhone simulator destination found for scheme '$SCHEME'." >&2
-  echo "Check the scheme exists: xcodebuild -workspace $WORKSPACE -list" >&2
-  exit 1
+  # `|| true` above so that a scheme with no matching destination reaches this check rather than
+  # aborting the pipeline under `set -e`, which exits silently with no output at all.
+  if [ -z "$DESTINATION_SPEC" ]; then
+    echo "Error: no iPhone simulator destination found for scheme '$SCHEME'." >&2
+    echo "Check the scheme exists: xcodebuild -workspace $WORKSPACE -list" >&2
+    exit 1
+  fi
+
+  DEVICE_OS=${DESTINATION_SPEC%%|*}
+  DEVICE_NAME=${DESTINATION_SPEC#*|}
+
+  DESTINATION="platform=iOS Simulator,name=$DEVICE_NAME,OS=$DEVICE_OS"
 fi
-
-DEVICE_OS=${DESTINATION_SPEC%%|*}
-DEVICE_NAME=${DESTINATION_SPEC#*|}
-
-DESTINATION="platform=iOS Simulator,name=$DEVICE_NAME,OS=$DEVICE_OS"
 
 echo "Running tests for scheme: $SCHEME"
 

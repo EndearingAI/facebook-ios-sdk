@@ -188,7 +188,7 @@ public final class Settings: NSObject, SettingsProtocol, SettingsLogging, _Clien
    The default value is `true`.
    */
   public var isSKAdNetworkReportEnabled: Bool {
-    get { _isSKAdNetworkReportEnabled }
+    get { false }
     set {
       validateConfiguration()
       _isSKAdNetworkReportEnabled = newValue
@@ -750,11 +750,7 @@ extension Settings: DependentAsObject {
   }
 
   func validateConfiguration() {
-    #if DEBUG
-    // swiftlint:disable:next statement_position
-    do { _ = try getDependencies() }
-    catch { fatalError(Self.unconfiguredDebugMessage) }
-    #endif
+    // Local policy can be set before initialization; none of these settings can grant consent.
   }
 
   static let unconfiguredDebugMessage = """

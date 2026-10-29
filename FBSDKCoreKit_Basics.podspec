@@ -43,12 +43,24 @@ Pod::Spec.new do |s|
   s.author       = 'Facebook'
 
   s.platform     = :ios
-  s.ios.deployment_target = '12.0'
+  s.ios.deployment_target = '13.0'
   s.library = 'z'
 
-  s.source = {
-    http: "https://github.com/facebook/facebook-ios-sdk/releases/download/v#{s.version}/FacebookSDK_Dynamic.xcframework.zip",
-    sha1: '93b84392c4bcc4399e9abd4c50b80e6a3c9f95c2'
+  # Maintained source distribution: never download upstream prebuilt XCFrameworks.
+  s.source = { git: 'https://github.com/EndearingAI/facebook-ios-sdk.git', branch: 'codex/consent-control' }
+  s.source_files = 'FBSDKCoreKit_Basics/FBSDKCoreKit_Basics/**/*.{h,m,mm,swift}'
+  s.public_header_files = 'FBSDKCoreKit_Basics/FBSDKCoreKit_Basics/include/*.h'
+  s.swift_version = '5.0'
+  s.requires_arc = true
+  s.frameworks = 'Foundation', 'UIKit', 'AppTrackingTransparency'
+  s.libraries = 'z', 'c++'
+  s.prefix_header_contents = '#import <TargetConditionals.h>'
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'ENABLE_TESTABILITY' => 'YES',
+    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FBSDKCOCOAPODS=1',
+    'CLANG_CXX_LANGUAGE_STANDARD' => 'c++11',
+    'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_TARGET_SRCROOT)/FBSDKCoreKit_Basics/FBSDKCoreKit_Basics/**"'
   }
-  s.vendored_frameworks = 'XCFrameworks/FBSDKCoreKit_Basics.xcframework'
+  s.resource_bundles = { 'FBSDKCoreKit_Basics_Privacy' => ['FBSDKCoreKit_Basics/FBSDKCoreKit_Basics/PrivacyInfo.xcprivacy'] }
 end
