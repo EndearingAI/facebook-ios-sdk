@@ -8,7 +8,7 @@
 
 #if !TARGET_OS_TV
 
-#import <FBAEMKit/FBAEMKit-Swift.h>
+#import <FBAEMKit/FBSKAdNetworkReporting.h>
 #import <FBSDKCoreKit/FBSDKAppEventsReporter.h>
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 #import <Foundation/Foundation.h>

@@ -10,7 +10,7 @@
 #import "FBSDKAuthenticationToken+Internal.h"
 
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 
 static FBSDKAuthenticationToken *g_currentAuthenticationToken;
 static id<FBSDKTokenCaching> g_tokenCache;

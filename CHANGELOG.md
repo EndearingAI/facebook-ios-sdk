@@ -18,6 +18,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Only explicit install/app-open attribution is enabled. Automatic events, diagnostics, IAP,
   SKAN, AEM, codeless, model/metadata collection, user data, and extra device information are disabled.
 - All six CocoaPods specs compile maintained source instead of downloading upstream binaries.
+- Source pods support default static libraries without requiring framework linkage;
+  shared Objective-C protocol headers and explicit Swift imports preserve module boundaries.
 
 
 [Full Changelog](https://github.com/facebook/facebook-ios-sdk/compare/v18.1.1...HEAD)

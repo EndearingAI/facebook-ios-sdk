@@ -81,6 +81,12 @@ A static Swift pod consumer needs Swift runtime linkage (the app's Swift
 AppDelegate provides this; an otherwise ObjC-only host can add an empty Swift
 file). No generated Xcode projects or binary artifacts are committed.
 
+The source pods support the app's default CocoaPods static-library configuration;
+`use_frameworks!` is not required. The cross-module SKAdNetwork protocol lives in
+AEM's public Objective-C headers with its existing Objective-C and Swift names.
+Core implementation files import their own generated Swift header locally rather
+than assuming a framework header layout.
+
 `Package.swift` still describes upstream binary releases and is deliberately
 unchanged. Use the source CocoaPods distribution for this consent contract.
 
@@ -102,6 +108,18 @@ filesystem failures to exercise the native boundary. They cover denied startup,
 real offline activation/withdrawal/reconnect, late/suspended requests, callback
 settlement, immediate payload release, erasure errors, explicit app-open wire
 payloads, fresh identity, and install-once bookkeeping.
+
+Run the persistent all-six-pod static-library consumer check in both Debug and
+Release (it also compiles Objective-C module imports and Swift interoperability):
+
+```sh
+FBSDK_SOURCE_PODS_BUILD_ROOT=/tmp/meta-source-pods-check ConsentTests/test-source-pods.sh
+```
+
+The script requires CocoaPods and xcodegen, writes generated projects/builds to
+the selected scratch directory, and defaults to the arm64 simulator architecture.
+Use `FBSDK_SOURCE_PODS_ARCHS` to select another installed simulator architecture.
+The fixture deliberately omits `use_frameworks!` to match Expo's default linkage.
 
 For the upstream all-module suite, use an explicit device to avoid interfering
 with another developer's simulator:

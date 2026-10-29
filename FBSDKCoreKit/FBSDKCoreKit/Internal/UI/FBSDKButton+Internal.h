@@ -13,7 +13,7 @@
 #import <FBSDKCoreKit/FBSDKButtonImpressionLogging.h>
 
 #import <FBSDKCoreKit/FBSDKEventLogging.h>
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 
 NS_ASSUME_NONNULL_BEGIN
 

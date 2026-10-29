@@ -1,0 +1,18 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved. Licensed under the root LICENSE file.
+name: MetaStaticConsumer
+options:
+  deploymentTarget:
+    iOS: '13.0'
+targets:
+  MetaStaticConsumer:
+    type: application
+    platform: iOS
+    sources: [main.m, StaticInterop.swift]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.endearing.MetaStaticConsumer
+      GENERATE_INFOPLIST_FILE: YES
+      CLANG_ENABLE_MODULES: YES
+      CLANG_ENABLE_OBJC_ARC: YES
+      SWIFT_VERSION: '5.0'
+      CODE_SIGNING_ALLOWED: NO

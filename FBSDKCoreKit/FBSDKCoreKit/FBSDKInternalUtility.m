@@ -9,7 +9,7 @@
 #import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKDomainHandler.h"
 
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 #import <mach-o/dyld.h>
 #import <sys/time.h>

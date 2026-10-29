@@ -48,6 +48,7 @@ Pod::Spec.new do |s|
     # Maintained source distribution: never download upstream prebuilt XCFrameworks.
   s.source = { git: 'https://github.com/EndearingAI/facebook-ios-sdk.git', branch: 'codex/consent-control' }
   s.source_files = 'FBAEMKit/FBAEMKit/**/*.{h,m,mm,swift}'
+  s.public_header_files = 'FBAEMKit/FBAEMKit/include/*.h'
   s.swift_version = '5.0'
   s.requires_arc = true
   s.frameworks = 'Foundation', 'UIKit'

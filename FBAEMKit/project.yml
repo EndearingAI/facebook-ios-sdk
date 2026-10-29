@@ -27,7 +27,11 @@ targets:
     platform: iOS
     productName: FBAEMKit
     sources:
+      - path: FBAEMKit/include
+        headerVisibility: public
       - path: FBAEMKit
+        excludes:
+          - include
     dependencies:
       - target: FBSDKCoreKit_Basics/FBSDKCoreKit_Basics-Static
         link: false
@@ -41,7 +45,11 @@ targets:
     platform: iOS
     productName: FBAEMKit
     sources:
+      - path: FBAEMKit/include
+        headerVisibility: public
       - path: FBAEMKit
+        excludes:
+          - include
     dependencies:
       - target: FBSDKCoreKit_Basics/FBSDKCoreKit_Basics-Dynamic
       - sdk: UIKit.framework

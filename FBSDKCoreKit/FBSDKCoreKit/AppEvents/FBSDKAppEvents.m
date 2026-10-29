@@ -14,7 +14,7 @@
 #import <UIKit/UIApplication.h>
 
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 
 #import "FBSDKATEPublishing.h"
 #import "FBSDKAccessToken.h"

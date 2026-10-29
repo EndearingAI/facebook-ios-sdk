@@ -8,7 +8,7 @@
 
 #import "FBSDKGraphRequestConnection+Internal.h"
 
-#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import "FBSDKCoreKit-Swift.h"
 
 #import "FBSDKErrorRecoveryAttempter.h"
 #import "FBSDKGraphRequest+Internal.h"
